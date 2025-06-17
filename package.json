@@ -1,6 +1,6 @@
 {
     "name": "@ledger-releaser/examplepackage12",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "An example npm package for demonstration purposes.",
     "main": "index.js",
     "scripts": {
@@ -10,7 +10,7 @@
     "license": "MIT",
     "repository": {
       "type": "git",
-      "url": "https://github.com/AEnguerrand/npm-publish-slsa-two-steps"
+      "url": "https://github.com/LedgerHQ/npm-attest-lab"
     }
   }
   
