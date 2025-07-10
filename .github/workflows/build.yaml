@@ -38,9 +38,9 @@ jobs:
 
       - name: Configure npm authentication
         run: |
-          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/" > .npmrc
-          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
-          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/:always-auth=true" >> .npmrc
+          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/" > .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:always-auth=true" >> .npmrc
 
 
       - name: Publish package to JFrog Ledger with npm
