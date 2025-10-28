@@ -45,7 +45,7 @@ jobs:
 
       - name: Publish package to JFrog Ledger with npm
         run: |
-          npm publish --tag testing
+          npm publish --tag tagtesting
       - name: Attest for npmjs.com
         uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@feat-init-npmjs-com-action
         with:
