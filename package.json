@@ -1,6 +1,6 @@
 {
     "name": "@ledger-releaser/examplepackage12",
-    "version": "0.2.11",
+    "version": "0.2.12",
     "description": "An example npm package for demonstration purposes.",
     "main": "index.js",
     "scripts": {
