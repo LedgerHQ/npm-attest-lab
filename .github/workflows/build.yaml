@@ -47,7 +47,7 @@ jobs:
         run: |
           npm publish --tag tagtesting
       - name: Attest for npmjs.com
-        uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@feat-init-npmjs-com-action
+        uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@actions/attest-for-npmsjs-com-0
         with:
           subject-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}  
 
