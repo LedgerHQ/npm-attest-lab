@@ -76,7 +76,7 @@ jobs:
             attempt=$((attempt + 1))
             echo "Poll attempt ${attempt}/${DEPLOYMENT_POLL_MAX_ATTEMPTS}..."
             
-            RESPONSE=$(curl -s -f -H "x-api-key: ${{ secrets.SUPPLY_CHAIN_API_KEY }}" "${STATUS_URL}" 2>&1) || {
+            RESPONSE=$(curl -s -f "${STATUS_URL}" 2>&1) || {
               echo "API request failed (attempt ${attempt}), retrying in ${DEPLOYMENT_POLL_INTERVAL}s..."
               sleep "${DEPLOYMENT_POLL_INTERVAL}"
               continue
