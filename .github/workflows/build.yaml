@@ -9,11 +9,6 @@ permissions:
   id-token: write
   attestations: write
 
-env:
-  DEPLOYMENT_API_URL: "https://api.security.ledger.com/oss-supply-chain"
-  DEPLOYMENT_POLL_INTERVAL: 10
-  DEPLOYMENT_POLL_MAX_ATTEMPTS: 30
-
 jobs:
   build:
     runs-on: public-ledgerhq-shared-small
@@ -29,17 +24,11 @@ jobs:
       - name: Get npm package filename
         id: package-info
         run: |
-          PACKAGE_PATH=$(ls -1 *.tgz | head -n 1) # To be change with the action as input
-
+          PACKAGE_PATH=$(ls -1 *.tgz | head -n 1)
           pack_json=$(npm pack $PACKAGE_PATH --json | tee pack.json | jq -c)
           jq <pack.json
-          
           PACKAGE_FILENAME=$(echo "$pack_json" | jq -r '.[0].filename')
-          PACKAGE_NAME=$(echo "$pack_json" | jq -r '.[0].name')
-          PACKAGE_VERSION=$(echo "$pack_json" | jq -r '.[0].version')
           echo "PACKAGE_FILENAME=${PACKAGE_FILENAME}" >> $GITHUB_OUTPUT
-          echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_OUTPUT
-          echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Login to JFrog Ledger
         id: jfrog-login
@@ -58,61 +47,10 @@ jobs:
       - name: Attest for npmjs.com
         uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@attest-npm-dir-support
         with:
-          subject-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}  
+          subject-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
 
-      - name: Wait for deployment via api-oss-software-supply-chain
-        id: deployment-check
-        run: |
-          PACKAGE_NAME="${{ steps.package-info.outputs.PACKAGE_NAME }}"
-          PACKAGE_VERSION="${{ steps.package-info.outputs.PACKAGE_VERSION }}"
-          
-          echo "Checking deployment status for ${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          
-          ENCODED_NAME=$(echo "${PACKAGE_NAME}" | jq -sRr @uri)
-          STATUS_URL="${DEPLOYMENT_API_URL}/api/deployments/status?type=npm&name=${ENCODED_NAME}&version=${PACKAGE_VERSION}"
-          
-          attempt=0
-          while [ $attempt -lt $DEPLOYMENT_POLL_MAX_ATTEMPTS ]; do
-            attempt=$((attempt + 1))
-            echo "Poll attempt ${attempt}/${DEPLOYMENT_POLL_MAX_ATTEMPTS}..."
-            
-            RESPONSE=$(curl -s -f "${STATUS_URL}" 2>&1) || {
-              echo "API request failed (attempt ${attempt}), retrying in ${DEPLOYMENT_POLL_INTERVAL}s..."
-              sleep "${DEPLOYMENT_POLL_INTERVAL}"
-              continue
-            }
-            
-            STATUS=$(echo "${RESPONSE}" | jq -r '.results[0].status')
-            echo "Deployment status: ${STATUS}"
-            
-            case "${STATUS}" in
-              success)
-                echo "Deployment successful!"
-                echo "status=success" >> "$GITHUB_OUTPUT"
-                exit 0
-                ;;
-              failed)
-                MSG=$(echo "${RESPONSE}" | jq -r '.results[0].message // "no details"')
-                echo "::error::Deployment failed — ${MSG}"
-                echo "status=failed" >> "$GITHUB_OUTPUT"
-                exit 1
-                ;;
-              queued|in_progress)
-                echo "Deployment ${STATUS}, waiting ${DEPLOYMENT_POLL_INTERVAL}s..."
-                sleep "${DEPLOYMENT_POLL_INTERVAL}"
-                ;;
-              unknown)
-                echo "Package not yet seen by the API, waiting ${DEPLOYMENT_POLL_INTERVAL}s..."
-                sleep "${DEPLOYMENT_POLL_INTERVAL}"
-                ;;
-              *)
-                echo "::warning::Unexpected status: ${STATUS}"
-                sleep "${DEPLOYMENT_POLL_INTERVAL}"
-                ;;
-            esac
-          done
-          
-          echo "::error::Deployment status check timed out after $((DEPLOYMENT_POLL_MAX_ATTEMPTS * DEPLOYMENT_POLL_INTERVAL))s"
-          echo "status=timeout" >> "$GITHUB_OUTPUT"
-          exit 1
+      - name: Check deployment status
+        uses: LedgerHQ/actions-security/actions/check-npm-deployment@actions/check-npm-deployment-1
+        with:
+          tarball-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
 
