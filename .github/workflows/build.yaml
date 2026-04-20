@@ -92,9 +92,8 @@ jobs:
                 exit 0
                 ;;
               failed)
-                ERROR_CODE=$(echo "${RESPONSE}" | jq -r '.results[0].error_code // "unknown"')
-                ERROR_MSG=$(echo "${RESPONSE}" | jq -r '.results[0].error // "no details"')
-                echo "::error::Deployment failed: [${ERROR_CODE}] ${ERROR_MSG}"
+                MSG=$(echo "${RESPONSE}" | jq -r '.results[0].message // "no details"')
+                echo "::error::Deployment failed — ${MSG}"
                 echo "status=failed" >> "$GITHUB_OUTPUT"
                 exit 1
                 ;;
