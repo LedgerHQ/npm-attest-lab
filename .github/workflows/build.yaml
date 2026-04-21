@@ -50,7 +50,7 @@ jobs:
           subject-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
 
       - name: Check deployment status
-        uses: LedgerHQ/actions-security/actions/check-npm-deployment@actions/check-npm-deployment-1
+        uses: LedgerHQ/actions-security/actions/check-npm-deployment@xchalle/fix-check-npm-deployment
         with:
           tarball-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
 
