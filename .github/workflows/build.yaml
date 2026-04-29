@@ -49,8 +49,8 @@ jobs:
         with:
           subject-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
 
-      - name: Check deployment status
-        uses: LedgerHQ/actions-security/actions/check-deployment@xchalle/fix-check-npm-deployment
+      - name: Check OSS publishing status
+        uses: LedgerHQ/actions-security/actions/check-publishing-oss@actions/check-publishing-oss-1
         with:
           package-type: npm
           tarball-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
