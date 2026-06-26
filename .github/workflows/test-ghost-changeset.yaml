@@ -1,0 +1,82 @@
+name: Test Ghost CLI with Changeset Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in dry-run mode (skips actual publish)"
+        required: true
+        default: true
+        type: boolean
+  push:
+    branches:
+      - feat/test-ghost-cli-changeset
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  JFROG_CLI_GHOST_FROG: "true"
+  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
+
+jobs:
+  publish:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Login to JFrog Ledger
+        id: jfrog-login
+        uses: LedgerHQ/actions-security/actions/jfrog-login@actions/jfrog-login-1
+
+      - name: Configure npm authentication
+        run: |
+          echo "registry=https://${{ env.NPM_REGISTRY }}/" > .npmrc
+          echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
+
+      - name: Changeset publish (REAL)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+        run: pnpm changeset publish --tag ghost-test
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Changeset publish (DRY RUN)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        run: pnpm publish --dry-run --no-git-checks
+
+      - name: Verify ghost CLI behavior
+        run: |
+          echo "=== JFrog CLI config ==="
+          jf config show || true
+          echo ""
+          echo "=== JFROG_CLI_GHOST_FROG ==="
+          echo "$JFROG_CLI_GHOST_FROG"
+          echo ""
+          echo "=== npm config ==="
+          npm config list
+          echo ""
+          echo "=== .npmrc contents ==="
+          cat .npmrc || true
