@@ -45,7 +45,9 @@ jobs:
           echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --reporter=default
+        env:
+          JFROG_CLI_LOG_LEVEL: DEBUG
 
       - name: Build
         run: pnpm run build
