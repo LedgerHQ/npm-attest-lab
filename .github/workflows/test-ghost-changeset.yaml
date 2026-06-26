@@ -12,7 +12,7 @@ permissions:
   attestations: write
 
 env:
-  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
+  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public
 
 jobs:
   publish:
@@ -31,7 +31,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
           run_install: false
 
       - name: Login to JFrog Ledger
