@@ -43,7 +43,7 @@ jobs:
 
       - name: Login to JFrog Ledger
         id: jfrog-login
-        uses: LedgerHQ/actions-security/actions/jfrog-login@actions/jfrog-login-1
+        uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
 
       - name: Configure npm authentication
         run: |
