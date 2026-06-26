@@ -2,12 +2,6 @@ name: Test Ghost CLI with Changeset Publish
 
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Run in dry-run mode (skips actual publish)"
-        required: true
-        default: true
-        type: boolean
   push:
     branches:
       - feat/test-ghost-cli-changeset
@@ -57,15 +51,10 @@ jobs:
           echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
           echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
 
-      - name: Changeset publish (REAL)
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+      - name: Changeset publish
         run: pnpm changeset publish --tag ghost-test
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Changeset publish (DRY RUN)
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
-        run: pnpm publish --dry-run --no-git-checks
 
       - name: Verify ghost CLI behavior
         run: |
