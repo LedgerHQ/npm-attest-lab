@@ -38,7 +38,11 @@ jobs:
         id: jfrog-login
         uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
 
-      - name: Configure npm authentication
+      - name: Configure JFrog CLI for npm
+        run: |
+          jf npm-config --repo-resolve=ossproxy-npm-proxy-npmjs --repo-deploy=cybersec-npm-sandbox-green --server-id-resolve=setup-jfrog-cli-server --server-id-deploy=setup-jfrog-cli-server
+
+      - name: Configure npm authentication for changeset publish
         run: |
           echo "@ledger-releaser:registry=https://${{ env.NPM_REGISTRY }}/" > .npmrc
           echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
