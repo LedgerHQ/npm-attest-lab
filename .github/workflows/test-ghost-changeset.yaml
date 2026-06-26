@@ -19,7 +19,7 @@ permissions:
 
 env:
   JFROG_CLI_GHOST_FROG: "true"
-  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public
+  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
 
 jobs:
   publish:
