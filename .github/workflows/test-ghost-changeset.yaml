@@ -12,7 +12,7 @@ permissions:
   attestations: write
 
 env:
-  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
+  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public
 
 jobs:
   publish:
@@ -34,12 +34,6 @@ jobs:
           version: 9
           run_install: false
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Build
-        run: pnpm run build
-
       - name: Login to JFrog Ledger
         id: jfrog-login
         uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
@@ -49,6 +43,12 @@ jobs:
           echo "@ledger-releaser:registry=https://${{ env.NPM_REGISTRY }}/" > .npmrc
           echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
           echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
 
       - name: Changeset publish
         run: pnpm changeset publish --tag ghost-test
