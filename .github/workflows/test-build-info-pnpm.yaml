@@ -1,0 +1,103 @@
+name: Test Build-Info with pnpm (Ghost Frog)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/test-build-info-npm
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
+  BUILD_NAME: LedgerHQ/npm-attest-lab-pnpm
+  BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  publish:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Login to JFrog (Ghost Frog)
+        id: jfrog-login
+        uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
+
+      - name: Configure npm resolve + deploy repos
+        run: |
+          jf npm-config \
+            --repo-resolve=ossproxy-npm-proxy-npmjs --server-id-resolve=setup-jfrog-cli-server \
+            --repo-deploy=cybersec-npm-sandbox-green --server-id-deploy=setup-jfrog-cli-server
+
+      - name: Debug - which pnpm
+        run: |
+          echo "=== which pnpm ==="
+          which pnpm
+          file $(which pnpm) || true
+          echo ""
+          echo "=== pnpm --version ==="
+          pnpm --version
+          echo ""
+          echo "=== Ghost Frog env ==="
+          echo "JFROG_CLI_GHOST_FROG=$JFROG_CLI_GHOST_FROG"
+          echo "JFROG_CLI_BUILD_NAME=$JFROG_CLI_BUILD_NAME"
+
+      - name: Configure npm auth
+        run: |
+          echo "@ledger-releaser:registry=https://${{ env.NPM_REGISTRY }}/" > .npmrc
+          echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
+
+      - name: Install dependencies (pnpm install)
+        run: pnpm install --no-frozen-lockfile
+        env:
+          JFROG_CLI_LOG_LEVEL: DEBUG
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Publish to JFrog (pnpm publish)
+        run: pnpm publish --tag pnpm-buildinfo-test --no-git-checks
+        env:
+          JFROG_CLI_LOG_LEVEL: DEBUG
+
+      - name: Publish build-info
+        run: jf rt build-publish "${{ env.BUILD_NAME }}" "${{ env.BUILD_NUMBER }}"
+
+      - name: Verify build-info in Artifactory
+        run: |
+          jf rt curl -s "/api/build/${{ env.BUILD_NAME }}/${{ env.BUILD_NUMBER }}" | python3 -c "
+          import sys,json
+          try:
+              data = json.load(sys.stdin)
+              bi = data.get('buildInfo',{})
+              modules = bi.get('modules',[])
+              print(f'Build found: {bi.get(\"name\")}#{bi.get(\"number\")}')
+              for m in modules:
+                  deps = m.get('dependencies',[])
+                  arts = m.get('artifacts',[])
+                  has_sha = sum(1 for d in deps if d.get('sha256'))
+                  print(f'Module: {m.get(\"id\")}')
+                  print(f'  Artifacts: {len(arts)}')
+                  print(f'  Dependencies: {len(deps)} (with sha256: {has_sha})')
+                  for d in deps[:5]:
+                      print(f'    {d.get(\"id\")} sha256={d.get(\"sha256\",\"MISSING\")[:16]}')
+                  if len(deps) > 5:
+                      print(f'    ... +{len(deps)-5} more')
+          except Exception as e:
+              print(f'Error: {e}')
+          " || true
