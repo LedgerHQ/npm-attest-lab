@@ -1,10 +1,10 @@
 {
     "name": "@ledger-releaser/examplepackage12",
-    "version": "0.3.0-buildinfo-test.7",
+    "version": "0.3.0-buildinfo-test.8",
     "description": "An example npm package for demonstration purposes.",
     "main": "index.js",
     "scripts": {
-      "build": "npm pack && mkdir -p dist && mv *.tgz dist/",
+      "build": "pnpm pack && mkdir -p dist && mv *.tgz dist/",
       "test": "echo 'Running tests...'"
     },
     "license": "MIT",

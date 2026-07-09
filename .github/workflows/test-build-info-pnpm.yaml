@@ -70,7 +70,7 @@ jobs:
           JFROG_CLI_LOG_LEVEL: DEBUG
 
       - name: Build
-        run: npm run build
+        run: jf pnpm run build --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
 
       - name: Publish to JFrog (jf npm publish)
         run: jf npm publish --tag pnpm-buildinfo-test --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
