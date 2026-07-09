@@ -1,0 +1,122 @@
+name: Test Build-Info with npm (no changeset)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/test-build-info-npm
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
+  BUILD_NAME: LedgerHQ/npm-attest-lab
+  BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  publish:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Login to JFrog (Ghost Frog)
+        id: jfrog-login
+        uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
+
+      - name: Debug - Ghost Frog env vars
+        run: |
+          echo "=== Ghost Frog env ==="
+          echo "JFROG_CLI_GHOST_FROG=$JFROG_CLI_GHOST_FROG"
+          echo "JFROG_CLI_BUILD_NAME=$JFROG_CLI_BUILD_NAME"
+          echo "JFROG_CLI_BUILD_URL=$JFROG_CLI_BUILD_URL"
+          echo ""
+          echo "=== jf version ==="
+          jf --version
+          echo ""
+          echo "=== which npm ==="
+          which npm
+          file $(which npm) || true
+          echo ""
+          echo "=== jf config ==="
+          jf config show || true
+          echo ""
+          echo "=== npm config ==="
+          npm config list
+
+      - name: Configure npm auth
+        run: |
+          echo "@ledger-releaser:registry=https://${{ env.NPM_REGISTRY }}/" > .npmrc
+          echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
+          cat .npmrc
+
+      # Step A: install with native npm (Ghost Frog should intercept)
+      - name: Install dependencies (npm install)
+        run: npm install
+        env:
+          JFROG_CLI_LOG_LEVEL: DEBUG
+
+      - name: Debug - check build-info after install
+        run: |
+          echo "=== Build info dir ==="
+          ls -la ~/.jfrog/ 2>/dev/null || echo "no .jfrog dir"
+          find ~/.jfrog -name "*.json" -path "*/builds/*" 2>/dev/null | head -20 || true
+          echo ""
+          echo "=== jf rt build-collect-env ==="
+          jf rt build-collect-env "${{ env.BUILD_NAME }}" "${{ env.BUILD_NUMBER }}" || true
+
+      - name: Build
+        run: npm run build
+
+      # Step B: publish with npm (Ghost Frog should intercept)
+      - name: Publish to JFrog
+        run: npm publish --tag buildinfo-test
+        env:
+          JFROG_CLI_LOG_LEVEL: DEBUG
+
+      - name: Debug - check build-info after publish
+        run: |
+          echo "=== Build info files ==="
+          find ~/.jfrog -name "*.json" -path "*/builds/*" 2>/dev/null || true
+          echo ""
+          echo "=== Trying manual build-publish ==="
+          jf rt build-publish "${{ env.BUILD_NAME }}" "${{ env.BUILD_NUMBER }}" || echo "build-publish failed, trying with env vars..."
+
+      - name: Debug - verify build-info in Artifactory
+        run: |
+          echo "=== Check build in Artifactory ==="
+          jf rt curl -s "/api/build/${{ env.BUILD_NAME }}/${{ env.BUILD_NUMBER }}" | python3 -c "
+          import sys,json
+          try:
+              data = json.load(sys.stdin)
+              bi = data.get('buildInfo',{})
+              modules = bi.get('modules',[])
+              print(f'Build found: {bi.get(\"name\")}#{bi.get(\"number\")}')
+              for m in modules:
+                  deps = m.get('dependencies',[])
+                  arts = m.get('artifacts',[])
+                  has_sha = sum(1 for d in deps if d.get('sha256'))
+                  print(f'Module: {m.get(\"id\")}')
+                  print(f'  Artifacts: {len(arts)}')
+                  print(f'  Dependencies: {len(deps)} (with sha256: {has_sha})')
+                  for d in deps[:5]:
+                      print(f'    {d.get(\"id\")} sha256={d.get(\"sha256\",\"MISSING\")[:16]}')
+                  if len(deps) > 5:
+                      print(f'    ... +{len(deps)-5} more')
+          except Exception as e:
+              print(f'Error: {e}')
+              print(sys.stdin.read() if hasattr(sys.stdin,'read') else '')
+          " || true
+
+      - name: Debug - Xray scan build
+        run: |
+          echo "=== Scan build ==="
+          jf build-scan "${{ env.BUILD_NAME }}" "${{ env.BUILD_NUMBER }}" --fail=false --vuln || echo "build-scan not available or failed"
