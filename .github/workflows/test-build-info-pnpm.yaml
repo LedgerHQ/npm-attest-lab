@@ -37,11 +37,13 @@ jobs:
         id: jfrog-login
         uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
 
-      - name: Configure npm resolve + deploy repos
+      - name: Configure npm + pnpm resolve + deploy repos
         run: |
           jf npm-config \
             --repo-resolve=ossproxy-npm-proxy-npmjs --server-id-resolve=setup-jfrog-cli-server \
             --repo-deploy=cybersec-npm-sandbox-green --server-id-deploy=setup-jfrog-cli-server
+          jf pnpm-config \
+            --repo-resolve=ossproxy-npm-proxy-npmjs --server-id-resolve=setup-jfrog-cli-server
 
       - name: Debug - which pnpm
         run: |
@@ -70,8 +72,8 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Publish to JFrog (pnpm publish)
-        run: pnpm publish --tag pnpm-buildinfo-test --no-git-checks
+      - name: Publish to JFrog (via jf npm publish since pnpm-config has no deploy)
+        run: jf npm publish --tag pnpm-buildinfo-test --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
         env:
           JFROG_CLI_LOG_LEVEL: DEBUG
 
