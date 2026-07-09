@@ -2,9 +2,6 @@ name: Test Build-Info with npm (no changeset)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feat/test-build-info-npm
 
 permissions:
   contents: read
