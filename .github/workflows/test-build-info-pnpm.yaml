@@ -12,7 +12,7 @@ permissions:
 
 env:
   NPM_REGISTRY: jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-green
-  BUILD_NAME: LedgerHQ/npm-attest-lab-pnpm
+  BUILD_NAME: LedgerHQ/npm-attest-lab
   BUILD_NUMBER: ${{ github.run_number }}
 
 jobs:
