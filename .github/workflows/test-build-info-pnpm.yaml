@@ -64,15 +64,17 @@ jobs:
           echo "//${{ env.NPM_REGISTRY }}/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
           echo "//${{ env.NPM_REGISTRY }}/:always-auth=true" >> .npmrc
 
-      - name: Install dependencies (pnpm install)
-        run: pnpm install --no-frozen-lockfile
+      - name: Install dependencies (jf pnpm install)
+        run: jf pnpm install --no-frozen-lockfile --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
         env:
           JFROG_CLI_LOG_LEVEL: DEBUG
 
       - name: Build
         run: pnpm run build
+        env:
+          JFROG_CLI_GHOST_FROG: "false"
 
-      - name: Publish to JFrog (via jf npm publish since pnpm-config has no deploy)
+      - name: Publish to JFrog (jf npm publish)
         run: jf npm publish --tag pnpm-buildinfo-test --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
         env:
           JFROG_CLI_LOG_LEVEL: DEBUG
