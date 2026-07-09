@@ -31,6 +31,9 @@ jobs:
         id: jfrog-login
         uses: LedgerHQ/actions-security/actions/jfrog-login@feat/ghost-frog-env-var
 
+      - name: Configure npm deploy repo
+        run: jf npm-config --repo-deploy=cybersec-npm-sandbox-green --server-id-deploy=setup-jfrog-cli-server
+
       - name: Debug - Ghost Frog env vars
         run: |
           echo "=== Ghost Frog env ==="
