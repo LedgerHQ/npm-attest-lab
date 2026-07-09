@@ -72,8 +72,8 @@ jobs:
       - name: Build
         run: jf pnpm run build --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
 
-      - name: Publish to JFrog (jf npm publish)
-        run: jf npm publish --tag pnpm-buildinfo-test --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
+      - name: Publish to JFrog (jf pnpm publish)
+        run: jf pnpm publish --tag pnpm-buildinfo-test --no-git-checks --build-name="${{ env.BUILD_NAME }}" --build-number="${{ env.BUILD_NUMBER }}"
         env:
           JFROG_CLI_LOG_LEVEL: DEBUG
 
