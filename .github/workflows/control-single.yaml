@@ -47,9 +47,9 @@ jobs:
 
       - name: Configure npm authentication
         run: |
-          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/" > .npmrc
-          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
-          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:always-auth=true" >> .npmrc
+          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/" > .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/:always-auth=true" >> .npmrc
 
       - name: Publish package to JFrog Ledger with npm
         run: |
@@ -62,9 +62,9 @@ jobs:
         run: |
           set +e
           BASE="https://jfrog.ledgerlabs.net/artifactory"
-          echo "=== Storage listing of the package folder (deep) in cybersec-npm-sandbox-public ==="
+          echo "=== Storage listing of the package folder (deep) in cybersec-npm-prod-public ==="
           curl -sS -H "Authorization: Bearer ${JF_TOKEN}" \
-            "${BASE}/api/storage/cybersec-npm-sandbox-public/@ledger-releaser/examplepackage12?list&deep=1&listFolders=1" | jq . || true
+            "${BASE}/api/storage/cybersec-npm-prod-public/@ledger-releaser/examplepackage12?list&deep=1&listFolders=1" | jq . || true
           echo
           echo "=== AQL: find every artifact matching examplepackage12 across all repos ==="
           curl -sS -H "Authorization: Bearer ${JF_TOKEN}" -H "Content-Type: text/plain" \
