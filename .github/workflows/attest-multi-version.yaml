@@ -1,0 +1,96 @@
+name: Attest multiple tarballs (2 versions, end-to-end)
+
+# End-to-end test of the multi-tarball attestation change. Packs TWO distinct
+# versions of this example package into a single directory, publishes both to
+# JFrog, attests the whole directory in one call (one single-subject
+# attestation per tarball, via the feature branch), then verifies each version
+# was deployed to npmjs.com through the OSS Supply Chain pipeline.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v4
+
+      - name: Pack two versions into one directory
+        id: pack
+        run: |
+          set -euo pipefail
+
+          # Two distinct, collision-free versions (unique per run).
+          BASE=$(date +%s)
+          VERSION_A="0.2.${BASE}"
+          VERSION_B="0.2.$((BASE + 1))"
+
+          PKG_BASENAME="ledger-releaser-examplepackage12"
+          mkdir -p dist-tarballs
+
+          for VERSION in "$VERSION_A" "$VERSION_B"; do
+            rm -rf build
+            mkdir -p build
+            cp index.js README.md build/ 2>/dev/null || true
+            jq --arg v "$VERSION" '.version = $v' package.json > build/package.json
+            (cd build && npm pack --pack-destination "$GITHUB_WORKSPACE/dist-tarballs" >/dev/null)
+          done
+
+          echo "Packed tarballs:"
+          ls -1 dist-tarballs/*.tgz
+
+          echo "VERSION_A=${VERSION_A}" >> "$GITHUB_OUTPUT"
+          echo "VERSION_B=${VERSION_B}" >> "$GITHUB_OUTPUT"
+          echo "TARBALL_A=dist-tarballs/${PKG_BASENAME}-${VERSION_A}.tgz" >> "$GITHUB_OUTPUT"
+          echo "TARBALL_B=dist-tarballs/${PKG_BASENAME}-${VERSION_B}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Login to JFrog Ledger
+        id: jfrog-login
+        uses: LedgerHQ/actions-security/actions/jfrog-login@actions/jfrog-login-1
+
+      - name: Configure npm authentication
+        run: |
+          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/" > .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:always-auth=true" >> .npmrc
+
+      - name: Publish both versions to JFrog Ledger with npm
+        run: |
+          set -euo pipefail
+          for tarball in dist-tarballs/*.tgz; do
+            echo "Publishing $tarball"
+            npm publish "$tarball" --tag tagtesting
+          done
+
+      - name: Attest all tarballs for npmjs.com (feature branch)
+        id: attest
+        uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@xchalle/attest-npmjs-multi-tarball
+        with:
+          subject-path: dist-tarballs
+
+      - name: Report attested tarballs
+        run: |
+          echo "package-count=${{ steps.attest.outputs.package-count }}"
+          echo "tarball-paths:"
+          echo "${{ steps.attest.outputs.tarball-paths }}"
+
+      - name: Check OSS publishing status (version A)
+        uses: LedgerHQ/actions-security/actions/check-publishing-oss@actions/check-publishing-oss-0
+        with:
+          package-type: npm
+          tarball-path: ${{ steps.pack.outputs.TARBALL_A }}
+
+      - name: Check OSS publishing status (version B)
+        uses: LedgerHQ/actions-security/actions/check-publishing-oss@actions/check-publishing-oss-0
+        with:
+          package-type: npm
+          tarball-path: ${{ steps.pack.outputs.TARBALL_B }}
