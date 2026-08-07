@@ -1,0 +1,233 @@
+name: EXPERIMENT single attestation with 2 subjects
+
+# One-off experiment: does npm/OSS accept a SINGLE in-toto attestation whose
+# subject array contains TWO packages (multi-subject), instead of one
+# single-subject attestation per package?
+#
+# It packs two versions, publishes both to cybersec-npm-prod-public, builds ONE
+# statement listing both tarballs as subjects, signs it once, uploads it once,
+# then checks OSS deployment for both versions AND inspects npm provenance on
+# the public registry for each version.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v4
+
+      - name: Pack two versions into one directory
+        id: pack
+        run: |
+          set -euo pipefail
+          BASE=$(date +%s)
+          VERSION_A="0.2.${BASE}"
+          VERSION_B="0.2.$((BASE + 1))"
+          PKG_BASENAME="ledger-releaser-examplepackage12"
+          mkdir -p dist-tarballs
+          for VERSION in "$VERSION_A" "$VERSION_B"; do
+            rm -rf build
+            mkdir -p build
+            cp index.js README.md build/ 2>/dev/null || true
+            jq --arg v "$VERSION" '.version = $v' package.json > build/package.json
+            (cd build && npm pack --pack-destination "$GITHUB_WORKSPACE/dist-tarballs" >/dev/null)
+          done
+          ls -1 dist-tarballs/*.tgz
+          echo "VERSION_A=${VERSION_A}" >> "$GITHUB_OUTPUT"
+          echo "VERSION_B=${VERSION_B}" >> "$GITHUB_OUTPUT"
+          echo "TARBALL_A=${GITHUB_WORKSPACE}/dist-tarballs/${PKG_BASENAME}-${VERSION_A}.tgz" >> "$GITHUB_OUTPUT"
+          echo "TARBALL_B=${GITHUB_WORKSPACE}/dist-tarballs/${PKG_BASENAME}-${VERSION_B}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Login to JFrog Ledger
+        id: jfrog-login
+        uses: LedgerHQ/actions-security/actions/jfrog-login@actions/jfrog-login-1
+
+      - name: Configure npm authentication
+        run: |
+          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/" > .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-prod-public/:always-auth=true" >> .npmrc
+
+      - name: Publish both versions to JFrog Ledger with npm
+        run: |
+          set -euo pipefail
+          for tarball in "$GITHUB_WORKSPACE"/dist-tarballs/*.tgz; do
+            echo "Publishing $tarball"
+            npm publish "$tarball" --tag tagtesting
+          done
+
+      - name: Generate the predicate (same shape as the action)
+        env:
+          BUILDER_ID: ${{ github.workflow_ref }}
+          CONFIG_SOURCE_URI: git+${{ github.event.repository.html_url }}@${{ github.ref }}
+          CONFIG_SOURCE_DIGEST: ${{ github.sha }}
+          GITHUB_ACTOR_ID: ${{ github.actor_id }}
+          GITHUB_TRIGGERING_ACTOR_ID: ${{ github.triggering_actor }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          BUILD_INVOCATION_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          NPM_DIST_TAG: tagtesting
+        run: |
+          set -euo pipefail
+          ENTRY_POINT="${GITHUB_WORKFLOW_REF#*/*/}"; ENTRY_POINT="${ENTRY_POINT%@*}"
+          cat > predicate.json <<EOF
+          {
+              "builder": { "id": "$BUILDER_ID" },
+              "buildType": "https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1",
+              "invocation": {
+                  "configSource": {
+                      "uri": "$CONFIG_SOURCE_URI",
+                      "digest": { "sha1": "$CONFIG_SOURCE_DIGEST" },
+                      "entryPoint": "$ENTRY_POINT"
+                  },
+                  "environment": {
+                      "GITHUB_ACTOR_ID": "$GITHUB_ACTOR_ID",
+                      "GITHUB_EVENT_NAME": "$GITHUB_EVENT_NAME",
+                      "GITHUB_REF": "$GITHUB_REF",
+                      "GITHUB_REPOSITORY": "$GITHUB_REPOSITORY",
+                      "GITHUB_RUN_ID": "$GITHUB_RUN_ID",
+                      "GITHUB_SHA": "$GITHUB_SHA",
+                      "GITHUB_WORKFLOW_REF": "$GITHUB_WORKFLOW_REF",
+                      "NPM_DIST_TAG": "$NPM_DIST_TAG"
+                  }
+              },
+              "metadata": { "buildInvocationId": "$BUILD_INVOCATION_ID" },
+              "materials": [ { "uri": "$CONFIG_SOURCE_URI", "digest": { "sha1": "$CONFIG_SOURCE_DIGEST" } } ]
+          }
+          EOF
+          jq . predicate.json >/dev/null && echo "predicate.json OK"
+
+      - name: Build ONE in-toto statement with TWO subjects
+        env:
+          TARBALL_A: ${{ steps.pack.outputs.TARBALL_A }}
+          TARBALL_B: ${{ steps.pack.outputs.TARBALL_B }}
+        run: |
+          set -euo pipefail
+          rm -rf attestations && mkdir -p attestations
+
+          make_subject() {
+            local tarball="$1"
+            local pj name version scope rawname enc_scope enc_name enc_version purl digest
+            pj=$(tar xzf "$tarball" -O package/package.json)
+            name=$(jq -r '.name' <<<"$pj")
+            version=$(jq -r '.version' <<<"$pj")
+            scope=$(printf '%s' "$name" | cut -s -d'/' -f1)
+            rawname=$(printf '%s' "$name" | cut -s -d'/' -f2)
+            if [ -z "$rawname" ]; then rawname="$name"; scope=""; fi
+            enc_scope=$(jq -rn --arg v "$scope" '$v | @uri')
+            enc_name=$(jq -rn --arg v "$rawname" '$v | @uri')
+            enc_version=$(jq -rn --arg v "$version" '$v | @uri')
+            purl="pkg:npm/${enc_name}@${enc_version}"
+            if [ -n "$enc_scope" ]; then purl="pkg:npm/${enc_scope}/${enc_name}@${enc_version}"; fi
+            digest=$(openssl dgst -sha512 "$tarball" | awk '{print $NF}')
+            jq -cn --arg n "$purl" --arg d "$digest" '{name:$n, digest:{sha512:$d}}'
+          }
+
+          SUBJ_A=$(make_subject "$TARBALL_A")
+          SUBJ_B=$(make_subject "$TARBALL_B")
+          echo "Subject A: $SUBJ_A"
+          echo "Subject B: $SUBJ_B"
+
+          jq -n \
+            --arg type "https://in-toto.io/Statement/v0.1" \
+            --argjson sa "$SUBJ_A" \
+            --argjson sb "$SUBJ_B" \
+            --arg ptype "https://slsa.dev/provenance/v0.2" \
+            --slurpfile predicate predicate.json \
+            '{_type:$type, subject:[$sa,$sb], predicateType:$ptype, predicate:$predicate[0]}' \
+            > attestations/multi-subject-experiment
+          echo "=== multi-subject statement ==="
+          jq '{_type, subject, predicateType}' attestations/multi-subject-experiment
+
+      - name: Sign the single attestation
+        uses: slsa-framework/slsa-github-generator/.github/actions/sign-attestations@v2.0.0
+        with:
+          payload-type: application/vnd.in-toto+json
+          attestations: attestations
+          output-folder: attestations-signed
+
+      - name: Upload the single signed attestation to the GitHub API
+        uses: actions/github-script@v6
+        env:
+          ATTESTATIONS_DIR: attestations-signed
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const attestationsDir = process.env.ATTESTATIONS_DIR;
+            const [owner, repoName] = process.env.GITHUB_REPOSITORY.split('/');
+            const files = fs.readdirSync(attestationsDir).filter((f) => f.endsWith('.build.slsa')).sort();
+            if (files.length === 0) throw new Error(`No signed attestation files found in ./${attestationsDir}.`);
+            console.log(`Signed files found: ${files.join(', ')}`);
+            for (const file of files) {
+              const attestation = JSON.parse(fs.readFileSync(path.join(attestationsDir, file), 'utf8'));
+              const response = await github.request('POST /repos/{owner}/{repo}/attestations', {
+                owner, repo: repoName,
+                headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+                data: { bundle: attestation }
+              });
+              if (response.status !== 201) throw new Error(`Upload failed for ${file}: HTTP ${response.status}`);
+              console.log(`Uploaded ${file} (id: ${response.data && response.data.id}).`);
+            }
+
+      - name: Check OSS publishing status (version A)
+        id: oss-a
+        continue-on-error: true
+        uses: LedgerHQ/actions-security/actions/check-publishing-oss@actions/check-publishing-oss-0
+        with:
+          package-type: npm
+          tarball-path: ${{ steps.pack.outputs.TARBALL_A }}
+
+      - name: Check OSS publishing status (version B)
+        id: oss-b
+        continue-on-error: true
+        uses: LedgerHQ/actions-security/actions/check-publishing-oss@actions/check-publishing-oss-0
+        with:
+          package-type: npm
+          tarball-path: ${{ steps.pack.outputs.TARBALL_B }}
+
+      - name: Inspect npm provenance on the public registry
+        continue-on-error: true
+        env:
+          VERSION_A: ${{ steps.pack.outputs.VERSION_A }}
+          VERSION_B: ${{ steps.pack.outputs.VERSION_B }}
+        run: |
+          set +e
+          for V in "$VERSION_A" "$VERSION_B"; do
+            echo "=================================================="
+            echo "npm view @ledger-releaser/examplepackage12@${V}"
+            npm view "@ledger-releaser/examplepackage12@${V}" \
+              --registry=https://registry.npmjs.org/ \
+              --json 2>/dev/null | jq '{version, dist: {tarball: .dist.tarball, attestations: .dist.attestations, signatures: (.dist.signatures|length)}}'
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "OSS version A: ${{ steps.oss-a.outputs.status }}"
+          echo "OSS version B: ${{ steps.oss-b.outputs.status }}"
+          echo "OSS A error: ${{ steps.oss-a.outputs.error-message }}"
+          echo "OSS B error: ${{ steps.oss-b.outputs.error-message }}"
