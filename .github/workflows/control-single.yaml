@@ -55,6 +55,22 @@ jobs:
         run: |
           npm publish --tag tagtesting
 
+      - name: Inspect actual JFrog storage path (diagnostic)
+        env:
+          JF_TOKEN: ${{ steps.jfrog-login.outputs.oidc-token }}
+          PKG_VERSION: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
+        run: |
+          set +e
+          BASE="https://jfrog.ledgerlabs.net/artifactory"
+          echo "=== Storage listing of the package folder (deep) in cybersec-npm-sandbox-public ==="
+          curl -sS -H "Authorization: Bearer ${JF_TOKEN}" \
+            "${BASE}/api/storage/cybersec-npm-sandbox-public/@ledger-releaser/examplepackage12?list&deep=1&listFolders=1" | jq . || true
+          echo
+          echo "=== AQL: find every artifact matching examplepackage12 across all repos ==="
+          curl -sS -H "Authorization: Bearer ${JF_TOKEN}" -H "Content-Type: text/plain" \
+            -X POST "${BASE}/api/search/aql" \
+            --data 'items.find({"name":{"$match":"*examplepackage12*"}}).include("repo","path","name","created")' | jq . || true
+
       - name: Attest for npmjs.com
         uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@actions/attest-for-npmsjs-com-0
         with:
