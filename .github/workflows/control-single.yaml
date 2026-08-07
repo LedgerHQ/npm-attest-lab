@@ -1,0 +1,67 @@
+name: Control Single Package
+
+# Control run: mirrors build.yaml but bumps to a unique version at runtime so a
+# 403 from JFrog cannot be a false "version already exists" result. Used to prove
+# whether the JFrog->OSS->npm leg is broken independently of the attest changes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v4
+
+      - name: Bump to a unique version
+        run: |
+          UNIQUE_VERSION="0.2.$(date +%s)"
+          npm version "$UNIQUE_VERSION" --no-git-tag-version
+          echo "Using version $UNIQUE_VERSION"
+
+      - name: Build steps
+        run: |
+          echo "Building the project"
+          npm pack
+
+      - name: Get npm package filename
+        id: package-info
+        run: |
+          PACKAGE_PATH=$(ls -1 *.tgz | head -n 1)
+          pack_json=$(npm pack "$PACKAGE_PATH" --json | tee pack.json | jq -c)
+          jq <pack.json
+          PACKAGE_FILENAME=$(echo "$pack_json" | jq -r '.[0].filename')
+          echo "PACKAGE_FILENAME=${PACKAGE_FILENAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to JFrog Ledger
+        id: jfrog-login
+        uses: LedgerHQ/actions-security/actions/jfrog-login@actions/jfrog-login-1
+
+      - name: Configure npm authentication
+        run: |
+          echo "registry=https://jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/" > .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:_authToken=${{ steps.jfrog-login.outputs.oidc-token }}" >> .npmrc
+          echo "//jfrog.ledgerlabs.net/artifactory/api/npm/cybersec-npm-sandbox-public/:always-auth=true" >> .npmrc
+
+      - name: Publish package to JFrog Ledger with npm
+        run: |
+          npm publish --tag tagtesting
+
+      - name: Attest for npmjs.com
+        uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@actions/attest-for-npmsjs-com-0
+        with:
+          subject-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
+
+      - name: Check OSS publishing status
+        uses: LedgerHQ/actions-security/actions/check-publishing-oss@actions/check-publishing-oss-0
+        with:
+          package-type: npm
+          tarball-path: ${{ steps.package-info.outputs.PACKAGE_FILENAME }}
