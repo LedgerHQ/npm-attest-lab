@@ -1,0 +1,75 @@
+name: Attest cap scale test (50+ tarballs, no publish)
+
+# Proves the attest-for-npmsjs-com action no longer hits the SLSA generator's
+# 50-attestation-per-layout limit ("SLSA outputs layout had too many
+# attestations: N"). Packs `count` distinct versions of this example package
+# into one directory and attests them all in a single call.
+#
+# This test attests ONLY: it does not publish to JFrog, npmjs.com, or trigger
+# the OSS Supply Chain pipeline. The attestations are uploaded to this repo's
+# GitHub Attestations API (that is what the action does), which is harmless.
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'Number of distinct versions to pack and attest (must be > 50 to exercise the old cap).'
+        required: false
+        default: '55'
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  attest-scale:
+    runs-on: public-ledgerhq-shared-small
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v4
+
+      - name: Pack N versions into one directory
+        id: pack
+        run: |
+          set -euo pipefail
+
+          COUNT="${{ github.event.inputs.count }}"
+          if ! [[ "$COUNT" =~ ^[0-9]+$ ]] || [ "$COUNT" -lt 1 ]; then
+            echo "::error::Invalid count: $COUNT"
+            exit 1
+          fi
+
+          BASE=$(date +%s)
+          mkdir -p dist-tarballs
+
+          for i in $(seq 1 "$COUNT"); do
+            VERSION="0.2.$((BASE + i))"
+            rm -rf build
+            mkdir -p build
+            cp index.js README.md build/ 2>/dev/null || true
+            jq --arg v "$VERSION" '.version = $v' package.json > build/package.json
+            (cd build && npm pack --pack-destination "$GITHUB_WORKSPACE/dist-tarballs" >/dev/null)
+          done
+
+          PACKED=$(find dist-tarballs -maxdepth 1 -name '*.tgz' | wc -l)
+          echo "Packed ${PACKED} tarball(s)."
+          if [ "$PACKED" -ne "$COUNT" ]; then
+            echo "::error::Expected ${COUNT} tarballs but packed ${PACKED}."
+            exit 1
+          fi
+          echo "count=${PACKED}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest all tarballs for npmjs.com (feature branch)
+        id: attest
+        uses: LedgerHQ/actions-security/actions/attest-for-npmsjs-com@xchalle/attest-npmjs-multi-tarball
+        with:
+          subject-path: dist-tarballs
+
+      - name: Confirm cap is lifted
+        run: |
+          echo "Attested ${{ steps.pack.outputs.count }} tarballs in a single call without hitting the 50-attestation limit."
+          echo "tarball-path (first): ${{ steps.attest.outputs.tarball-path }}"
