@@ -16,6 +16,10 @@ on:
         description: 'Number of distinct versions to pack and attest (must be > 50 to exercise the old cap).'
         required: false
         default: '55'
+      runner:
+        description: 'Runner label to run on (e.g. ubuntu-latest or public-ledgerhq-shared-small).'
+        required: false
+        default: 'public-ledgerhq-shared-small'
 
 permissions:
   contents: read
@@ -24,7 +28,7 @@ permissions:
 
 jobs:
   attest-scale:
-    runs-on: public-ledgerhq-shared-small
+    runs-on: ${{ github.event.inputs.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
