@@ -105,11 +105,20 @@ jobs:
                   "environment": {
                       "GITHUB_ACTOR_ID": "$GITHUB_ACTOR_ID",
                       "GITHUB_EVENT_NAME": "$GITHUB_EVENT_NAME",
+                      "GITHUB_BASE_REF": "$GITHUB_BASE_REF",
                       "GITHUB_REF": "$GITHUB_REF",
+                      "GITHUB_REF_TYPE": "$GITHUB_REF_TYPE",
                       "GITHUB_REPOSITORY": "$GITHUB_REPOSITORY",
+                      "GITHUB_REPOSITORY_ID": "$GITHUB_REPOSITORY_ID",
+                      "GITHUB_REPOSITORY_OWNER": "$GITHUB_REPOSITORY_OWNER",
+                      "GITHUB_REPOSITORY_OWNER_ID": "$GITHUB_REPOSITORY_OWNER_ID",
+                      "GITHUB_RUN_ATTEMPT": "$GITHUB_RUN_ATTEMPT",
                       "GITHUB_RUN_ID": "$GITHUB_RUN_ID",
+                      "GITHUB_RUN_NUMBER": "$GITHUB_RUN_NUMBER",
                       "GITHUB_SHA": "$GITHUB_SHA",
+                      "GITHUB_TRIGGERING_ACTOR_ID": "$GITHUB_TRIGGERING_ACTOR_ID",
                       "GITHUB_WORKFLOW_REF": "$GITHUB_WORKFLOW_REF",
+                      "GITHUB_WORKFLOW_SHA": "$GITHUB_WORKFLOW_SHA",
                       "NPM_DIST_TAG": "$NPM_DIST_TAG"
                   }
               },
@@ -193,6 +202,9 @@ jobs:
               console.log(`Uploaded ${file} (id: ${response.data && response.data.id}).`);
             }
 
+      - name: Wait for org-level attestation index to propagate
+        run: sleep 45
+
       - name: Check OSS publishing status (version A)
         id: oss-a
         continue-on-error: true
@@ -226,8 +238,13 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          OSS_A_STATUS: ${{ steps.oss-a.outputs.status }}
+          OSS_B_STATUS: ${{ steps.oss-b.outputs.status }}
+          OSS_A_ERROR: ${{ steps.oss-a.outputs.error-message }}
+          OSS_B_ERROR: ${{ steps.oss-b.outputs.error-message }}
         run: |
-          echo "OSS version A: ${{ steps.oss-a.outputs.status }}"
-          echo "OSS version B: ${{ steps.oss-b.outputs.status }}"
-          echo "OSS A error: ${{ steps.oss-a.outputs.error-message }}"
-          echo "OSS B error: ${{ steps.oss-b.outputs.error-message }}"
+          printf 'OSS version A: %s\n' "$OSS_A_STATUS"
+          printf 'OSS version B: %s\n' "$OSS_B_STATUS"
+          printf 'OSS A error: %s\n' "$OSS_A_ERROR"
+          printf 'OSS B error: %s\n' "$OSS_B_ERROR"
